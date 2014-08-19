@@ -3,7 +3,8 @@ var util = require('./lib/utility');
 var partials = require('express-partials');
 var session = require('express-session');
 var bodyParser = require('body-parser');
-// var cookieParser = require('cookie-parser');
+var cookieParser = require('cookie-parser');
+var passport = require('passport');
 
 var db = require('./app/config');
 var Users = require('./app/collections/users');
@@ -21,30 +22,45 @@ app.use(partials());
 app.use(bodyParser.json());
 // Parse forms (signup/login)
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.static(__dirname + '/public'));
 app.use(bodyParser());
-app.use(session({ secret:'shhhh, very secret' }));    // use the secret option here in session and pass in the newly created username and password
+app.use(cookieParser());
+app.use(express.static(__dirname + '/public'));
 
-function restrict(req, res, next) {
-  if (req.session.user) {
-    next();
-  } else {
-    req.session.error = 'Access denied!';
-    res.redirect('/login');
-  }
+
+app.use(session({ secret:'shhhh, very secret' }));    // use the secret option here in session and pass in the newly created username and password
+app.use(passport.initialize());
+app.use(passport.session()); // persistent login sessions
+
+// function restrict(req, res, next) {
+//   if (req.session.user) {
+//     next();
+//   } else {
+//     req.session.error = 'Access denied!';
+//     res.redirect('/login');
+//   }
+// }
+
+// route middleware to make sure a user is logged in
+function isLoggedIn(req, res, next) {
+  // if user is authenticated in the session, carry on 
+  if (req.isAuthenticated())
+    return next();
+
+  // if they aren't redirect them to the home page
+  res.redirect('/');
 }
 
-app.get('/',  restrict,
+app.get('/',  isLoggedIn,
 function(req, res) {
   res.render('index');
 });
 
-app.get('/create', restrict,
+app.get('/create', isLoggedIn,
 function(req, res) {
   res.render('index');
 });
 
-app.get('/links', restrict,
+app.get('/links', isLoggedIn,
 function(req, res) {
   Links.reset().fetch().then(function(links) {
     res.send(200, links.models);
@@ -100,7 +116,6 @@ function(req, res) {
   res.render('signup');
   // render
 });
-
 
 app.post('/signup',
 function (req, res) {
