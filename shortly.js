@@ -1,16 +1,17 @@
-var express = require('express');
-var util = require('./lib/utility');
-var partials = require('express-partials');
-var session = require('express-session');
-var bodyParser = require('body-parser');
-var cookieParser = require('cookie-parser');
-var passport = require('passport');
+var util           = require('./lib/utility');
+var express        = require('express');
+var partials       = require('express-partials');
+var session        = require('express-session');
+var bodyParser     = require('body-parser');
+var cookieParser   = require('cookie-parser');
+var passport       = require('passport');
+var GitHubStrategy       = require('passport-github').Strategy;
 
-var db = require('./app/config');
+var db    = require('./app/config');
 var Users = require('./app/collections/users');
-var User = require('./app/models/user');
+var User  = require('./app/models/user');
 var Links = require('./app/collections/links');
-var Link = require('./app/models/link');
+var Link  = require('./app/models/link');
 var Click = require('./app/models/click');
 
 var app = express();
@@ -23,34 +24,87 @@ app.use(bodyParser.json());
 // Parse forms (signup/login)
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser());
-app.use(cookieParser());
+// app.use(cookieParser());
 app.use(express.static(__dirname + '/public'));
-
-
-app.use(session({ secret:'shhhh, very secret' }));    // use the secret option here in session and pass in the newly created username and password
 app.use(passport.initialize());
-app.use(passport.session()); // persistent login sessions
+app.use(passport.session());
+app.use(session({ secret:'shhhh, very secret' }));    // use the secret option here in session and pass in the newly created username and password
 
-// function restrict(req, res, next) {
-//   if (req.session.user) {
-//     next();
-//   } else {
-//     req.session.error = 'Access denied!';
-//     res.redirect('/login');
-//   }
-// }
 
-// route middleware to make sure a user is logged in
+  passport.use(new GitHubStrategy({
+      clientID: 'fb806c013d16fdd7bc15',
+      clientSecret: '55bc5bab1de3ed08ff6d43dab66448cf2180325c',
+      callbackURL: "http://127.0.0.1:4568/auth/github/callback"
+
+    }, function (accessToken, refreshToken, profile, done) {
+        new User({ githubId: profile.id }).fetch().then(function (user) {
+          console.log(user, 'THE USER');
+
+          if (!user) {
+            // create new user with githubId
+            var newUser = new User({
+              githubId: profile.id,
+              githubToken: accessToken
+            });
+            newUser.save().then(function (newUser) {
+              Users.add(newUser);
+              return done(null, newUser);
+            });
+          } else {
+            return done(null, user);
+          }
+          
+      });
+    }));
+
+  passport.serializeUser(function(user, done) {
+    done(null, user.id);
+  });
+    passport.deserializeUser(function(id, done) {
+      new User({ id: id }).fetch().then(function(err, user) {
+        done(err, user);
+      });
+    });
+
+
+  passport.deserializeUser(function(req, res) {
+    console.log(req.body.id);
+    new User({ id: req.body.id }).fetch().then(function(err, user) {
+      done(err, user);
+    });
+  });
+
 function isLoggedIn(req, res, next) {
-  // if user is authenticated in the session, carry on 
-  if (req.isAuthenticated())
-    return next();
-
-  // if they aren't redirect them to the home page
-  res.redirect('/');
+  if (req.isAuthenticated()) {
+    next();
+  } else {
+    req.session.error = 'Access denied!';
+    res.redirect('/login');
+  }
 }
 
-app.get('/',  isLoggedIn,
+/*function restrict(req, res, next) {
+  if (req.session.user) {
+    next();
+  } else {
+    req.session.error = 'Access denied!';
+    res.redirect('/login');
+  }
+}*/
+
+// route middleware to make sure a user is logged in
+// function isLoggedIn(req, res, next) {
+//   // if user is authenticated in the session, carry on 
+//   if (req.isAuthenticated())
+//     return next();
+
+//   // if they aren't redirect them to the home page
+//   res.redirect('/');
+// }
+
+
+
+app.get('/', isLoggedIn, // need to handle restricted access now from github's backend
 function(req, res) {
   res.render('index');
 });
@@ -105,6 +159,14 @@ function(req, res) {
 /************************************************************/
 // Write your authentication routes here
 /************************************************************/
+
+app.get('/auth/github', passport.authenticate('github'), function (req, res) {
+  res.render('/');
+});
+
+app.get('/auth/github/callback', 
+  passport.authenticate('github', { failureRedirect: '/signup', successRedirect: '/' }));
+
 app.get('/login',
 function(req, res) {
   res.render('login');
@@ -117,7 +179,7 @@ function(req, res) {
   // render
 });
 
-app.post('/signup',
+/*app.post('/signup',
 function (req, res) {
 
   var user = new User({
@@ -135,9 +197,9 @@ function (req, res) {
     res.redirect('/');
     
   });
-});
+});*/
 
-app.post('/login', 
+/*app.post('/login', 
   function(req, res) {
     new User({ username: req.body.username }).fetch().then(function(user) {
       if (!user) {
@@ -147,7 +209,7 @@ app.post('/login',
         res.redirect('/');
       }
     });
-  });
+  });*/
 
 app.get('/logout',
 function(req, res) {

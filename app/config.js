@@ -13,6 +13,8 @@ var db = Bookshelf.initialize({
   }
 });
 
+
+
 db.knex.schema.hasTable('urls').then(function(exists) {
   if (!exists) {
     db.knex.schema.createTable('urls', function (link) {
@@ -50,11 +52,16 @@ db.knex.schema.hasTable('users').then(function(exists) {
       user.increments('id').primary();
       user.string('username', 255);
       user.string('password', 255);
+      user.string('githubId', 255);
+      user.string('githubToken', 255);
 
     }).then(function (table) {
       console.log('Created Table', table);
     });
   }
 });
+
+    
+
 
 module.exports = db;
